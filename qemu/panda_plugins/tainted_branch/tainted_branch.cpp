@@ -21,13 +21,14 @@ extern "C" {
 #include "monitor.h"
 #include "cpu.h"
 #include "panda_plugin.h"
-#include "../taint/taint_ext.h"
+#include "../taint2/taint2_ext.h"
 #include "rr_log.h"
 #include "panda_plugin_plugin.h"
 }
 
 #include <stdio.h>
-#include "../taint/taint_processor.h"
+#include "../taint2/label_set.h"
+#include "../taint2/taint2.h"
 
 
 // These need to be extern "C" so that the ABI is compatible with
@@ -44,22 +45,18 @@ void uninit_plugin(void *);
 
 bool first_enable_taint = true;
 
-void tbranch_on_branch(int reg_num) {
-    if (taint_query_llvm(reg_num, /*offset=*/0)) {
-        printf("Branch condition on tainted LLVM register: %%%d\n", reg_num);
-        // Get taint compute number
-        uint32_t ls_type = taint_get_ls_type_llvm(reg_num, /*offset=*/0);
-        
-        // Print out the labels
-        printf("\tCompute number: %d\n", ls_type);
-        taint_spit_llvm(reg_num, /*offset=*/0);
+void tbranch_on_branch(LabelSetP ls) {
+    printf("BRANCH\n");
+    if (ls) {
+        printf("TAINTED BRANCH\n");
+
     }
 }
 
 int tbranch_after_block_exec(CPUState *env, TranslationBlock *tb, TranslationBlock *next_tb) {
-    if (taint_enabled()) {
+    if (taint2_enabled()) {
         if (first_enable_taint) {
-            PPP_REG_CB("taint", on_branch, tbranch_on_branch);    
+            PPP_REG_CB("taint2", on_branch, tbranch_on_branch);
             first_enable_taint = false;
             printf ("turning on tainted_branch before / after execute_taint_ops callbacs\n");
         }
@@ -73,8 +70,7 @@ bool init_plugin(void *self) {
 
 #ifdef CONFIG_SOFTMMU
   // this sets up the taint api fn ptrs so we have access
-  bool x = init_taint_api();  
-  assert (x==true);
+  assert(init_taint2_api());
 
   panda_cb pcb;
   pcb.after_block_exec = tbranch_after_block_exec;
